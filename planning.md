@@ -17,21 +17,21 @@ Fit for classification task: there are variety of posts:  people *asking* for co
 I use three labels. Each is defined by the author's **primary intent**, not by surface features like whether the title ends in a question mark or whether an image is attached.
 
 ### 1. Discussion / Opinion
-**Definition:** A post whose main goal is to spark a community conversation — sharing an opinion, hot take, experience, or observation and inviting others to weigh in. The author wants a range of views or stories *for their own sake*, not help with a problem or decision of their own.
+**Definition:** A post whose main goal is to spark a community conversation by sharing an opinion, hot take, experience, or observation and inviting others' views *for their own sake*, rather than seeking help with a problem or decision of the author's own.
 
 **Example posts:**
 - *"What to tell your past self?"* — "Has anyone ever used signs or some kind of item to remember your first time playing Stardew (or even just booting up a new save)? If so, what reminds you of your past Stardew playing self and what would you tell them?"
 - *"Prison for dummies"* (image post) — "After almost 2000 hours it still happens from time to time. Guess I'm just stupid 😒"
 
 ### 2. Help / Question
-**Definition:** A post whose main goal is to get assistance with the author's *own* situation — a gameplay problem, bug, strategy, or pending decision — so they can act on the replies. This holds even when the question is subjective and has no single right answer; what matters is that the author wants help moving forward, not just conversation.
+**Definition:** A post whose main goal is to get assistance with the author's *own* situation — a gameplay problem, bug, strategy, or pending decision — so they can act on the replies, even when the question is subjective and has no single right answer.
 
 **Example posts:**
 - *"PLEASE answer if you've completed or trying to complete the Desert Skull Mine"* — "I'm preparing for the desert mine (again)… I have a chest packed with explosives, food, and weapons. I still cannot get down 100 floors. What was your method?"
 - *"Woke up with Bream in my inventory?? I have not fished for over a month"* — "My inventory was empty except my tool bar the night before and when I awoke: fish! Please advise."
 
 ### 3. Showcase
-**Definition:** A post whose main goal is to display something the author made, did, achieved, or captured — a farm, build, achievement, screenshot, memorable moment, or a creation/resource they're sharing — for others to see and react to, rather than to ask for help or debate a topic.
+**Definition:** A post whose main goal is to display something the author made, did, achieved, or captured — a farm, build, achievement, screenshot, memorable moment, or creation/resource — for others to see and react to, rather than to ask for help or debate a topic.
 
 **Example posts:**
 - *"I reached the summit! Rate my farm and my home"* — "This took me like 200+ hours… I guess I'm wondering what other people would say about my setup. Either way doing this feels like a weight off my shoulders."
@@ -136,3 +136,31 @@ This project has no code to generate, so AI tools help in three specific places 
 - Whether **high-confidence errors** share a theme — a sign of a label-definition problem rather than honest ambiguity.
 
 **How I'll verify the patterns myself.** The AI's claimed patterns are hypotheses, not findings. For each pattern, I'll go back to the actual misclassified posts and confirm it holds by **reading the examples and checking the counts against the confusion matrix** — only patterns I can see in the real data go into my write-up, with the specific examples cited. If the AI over-generalizes from one or two cases, I drop the claim.
+
+---
+
+## Baseline Run
+
+**Setup.** Using Groq `llama-3.3-70b-versatile` (temperature 0), prompted with my label definitions + one example per label, evaluated on the 30-post test set. All 30 responses parsed cleanly.
+
+**Results.**
+
+| Label | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| Discussion/Opinion | 0.73 | 0.73 | 0.73 | 11 |
+| Help/Question | 0.88 | 0.78 | 0.82 | 9 |
+| Showcase | 0.82 | 0.90 | 0.86 | 10 |
+| **Accuracy** | | | **0.80** | 30 |
+| **Macro avg** | 0.81 | 0.80 | 0.80 | 30 |
+
+### Reflection
+
+**Where it struggled.** **Discussion/Opinion is clearly the weakest class** (F1 0.73, vs. 0.82 Help and 0.86 Showcase) — and it's weak in both directions (precision 0.73 and recall 0.73), so the model both misses true Discussion posts and wrongly labels other posts as Discussion. Showcase was easiest (recall 0.90), and Help/Question had high precision (0.88) but lower recall (0.78), meaning a couple of real Help posts got pulled into another class.
+
+**Hypothesis (to test after fine-tuning).** Discussion/Opinion is the hub of confusion, exactly as my Hard edge cases predicted that it sits on both gray boundaries, so errors should concentrate there in two specific ways:
+1. **Help → Discussion:** subjective or decision-seeking questions (e.g. "which character should I romance?") read like opinion prompts, so true Help posts leak into Discussion. This is what drags Help's recall down to 0.78.
+2. **Discussion ↔ Showcase:** Discussion posts anchored on a screenshot/achievement get misread as Showcase (hurting Discussion recall), while some genuine Discussion gets the Showcase label (Showcase precision 0.82, below its 0.90 recall).
+
+In short, I expect the confusion matrix to show most errors on the **Help↔Discussion** and **Showcase↔Discussion** pairs, with very few Help↔Showcase mix-ups (those two are the least similar).
+
+**What I'll check after fine-tuning.** (a) Does Discussion/Opinion's F1 rise the most? (b) Does the confusion matrix confirm errors cluster on the two predicted boundary pairs rather than scattering? (c) Does Help/Question recall improve past my 0.70 success floor? *Caveat:* per-class support is tiny (9–11 posts), so one or two reclassified posts swing these numbers a lot — I'll read changes as directional, not precise.
